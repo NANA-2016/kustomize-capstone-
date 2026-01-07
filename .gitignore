@@ -1,0 +1,23 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# Editors / IDEs
+.vscode/
+.idea/
+*.swp
+
+# Logs
+*.log
+
+# Local env files (don’t commit secrets)
+.env
+.env.*
+
+# Helm / K8s generated
+*.tgz
+
+# Kustomize build output (if you redirect builds to files)
+dist/
+build/
+overlays/**/secret.env
