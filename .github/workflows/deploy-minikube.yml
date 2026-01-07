@@ -1,0 +1,52 @@
+name: Deploy to Minikube with Kustomize
+
+on:
+  push:
+    branches: ["develop", "staging", "main"]
+    paths:
+      - "base/**"
+      - "overlays/**"
+      - ".github/workflows/deploy-minikube-kustomize.yml"
+
+jobs:
+  deploy:
+    # IMPORTANT: runs on your Ubuntu self-hosted runner
+    runs-on: self-hosted
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Verify kubectl context (minikube)
+        run: |
+          kubectl config current-context
+          kubectl get nodes
+
+      - name: Install kustomize (if missing)
+        run: |
+          if ! command -v kustomize >/dev/null 2>&1; then
+            curl -s https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh | bash
+            sudo mv kustomize /usr/local/bin/kustomize
+          fi
+          kustomize version
+
+      - name: Choose overlay
+        id: overlay
+        shell: bash
+        run: |
+          BRANCH="${GITHUB_REF_NAME}"
+          if [ "$BRANCH" = "develop" ]; then echo "path=overlays/dev" >> $GITHUB_OUTPUT; fi
+          if [ "$BRANCH" = "staging" ]; then echo "path=overlays/staging" >> $GITHUB_OUTPUT; fi
+          if [ "$BRANCH" = "main" ]; then echo "path=overlays/prod" >> $GITHUB_OUTPUT; fi
+          echo "Selected overlay: ${{ steps.overlay.outputs.path }}"
+
+      - name: Deploy with Kustomize
+        run: |
+          kubectl apply -k ${{ steps.overlay.outputs.path }}
+
+      - name: Verify deployment
+        run: |
+          OVERLAY="${{ steps.overlay.outputs.path }}"
+          NS=$(grep -m1 "^namespace:" "$OVERLAY/kustomization.yaml" | awk '{print $2}')
+          kubectl get deploy,svc,cm,secret -n "$NS"
+          kubectl rollout status deploy/webapp -n "$NS" --timeout=120s
